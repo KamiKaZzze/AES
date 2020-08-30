@@ -17,13 +17,15 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import us.codecraft.xsoup.Xsoup;
 
+import static io.restassured.RestAssured.given;
+
 public class AES {
 
     private long shiftL = 0;
-    private long shiftH = 100000;
+    private long shiftH = 2000;
 
 
-    @DataProvider()
+    @DataProvider(parallel = true)
     public Iterator<Object> getRockIterator() {
         return getRock().iterator();
     }
@@ -41,19 +43,27 @@ public class AES {
     public String encryptBySite(String strToEncrypt, String key)
     {
         RestAssured.baseURI ="https://encode-decode.com/aes-128-ecb-encrypt-online";
-        RequestSpecification request = RestAssured.given().with()
+        RestAssured.useRelaxedHTTPSValidation();
+        Response resp1 = given()
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .contentType(ContentType.URLENC).body("encryption%5Balgorithm%5D=aes-128-ecb&encryption%5BsourceText%5D="
-                        +strToEncrypt
-                        +"&encryption%5BdestinationText%5D=&encryption%5Bsecret%5D="
-                        +key
-                        +"&encryption%5Bencrypt%5D=&encryption%5B_token%5D=G6qpeCTrVM5RqNfs-ihvhpMqTE1c4hHn7VJMzSLF6ZY")
-                .when().log().all()
-                .then().log().all().request();
+                .when().get("/")
+                .then().log().all().extract().response();
+        Document document = Jsoup.parse(resp1.body().asString());
+        String token = Xsoup.compile("//*[@id=\"encryption__token\"]").evaluate(document).get();
+        token = token.substring(77,120);
 
-        Response response = request.post("/");
-        response = request.post("/");
-        Document document = Jsoup.parse(response.body().asString());
+        Response resp = given()
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .cookies(resp1.getCookies())
+            .contentType(ContentType.URLENC).body("encryption%5Balgorithm%5D=aes-128-ecb&encryption%5BsourceText%5D="
+                    +strToEncrypt
+                    +"&encryption%5BdestinationText%5D=&encryption%5Bsecret%5D="
+                    +key
+                    +"&encryption%5Bencrypt%5D=&encryption%5B_token%5D="+token)
+            .when().post("/")
+            .then().log().all().extract().response();
+
+        document = Jsoup.parse(resp.body().asString());
         String encoded = Xsoup.compile("//*[@id=\"encryption_destinationText\"]").evaluate(document).get();
         encoded = encoded.substring(132,156);
         return encoded.trim();
